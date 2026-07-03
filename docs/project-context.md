@@ -216,6 +216,39 @@ mocks       # Start local Akuity + SNOW mock servers
 
 ---
 
+### Documentation Standards
+
+#### README.md Requirements
+
+The project `README.md` is the primary entry point for developers, tenant teams, and platform engineers. It MUST be comprehensive and kept up to date as the project evolves. Any change that adds, modifies, or removes a user-facing feature, configuration option, metric, environment variable, CLI command, or deployment pattern MUST include a corresponding README update in the same changeset.
+
+**Required sections** (in order):
+
+1. **Project title and summary** — one-paragraph description of what the tool does and the ownership model (platform team vs. tenant team).
+2. **Table of contents** — linked section headings for quick navigation.
+3. **How It Works** — numbered step-by-step flow from tenant configuration through to observable output (metrics, logs).
+4. **Architecture** — ASCII or Mermaid diagram showing the runtime component layout (pod internals, ports, data flow to Prometheus). Include a module structure tree mapping source files to responsibilities, and a bullet list of key design decisions with brief rationale.
+5. **Target Configuration** — full YAML example covering every supported target type (HTTP, HTTPS, TCP, internal cluster, custom options). Include a field reference table (field, required, default, description) and a constraints subsection (max targets, min interval, uniqueness, validation behavior on invalid input).
+6. **Failure Diagnostics** — table of all failure categories with trigger conditions and suggested actions. Include a heuristic disclaimer note and description of the `diagnostics` object and `suggested_action` field in logs.
+7. **Prometheus Metrics** — table of all exposed metrics with name, type, labels, and description. Include example PromQL queries for common use cases (failing targets, firewall blocks, latency percentiles, alerting).
+8. **Structured Logging** — example JSON for both successful and failed checks. Describe log fields, the `diagnostics` object structure, and integration with the cluster log pipeline.
+9. **Local Development** — prerequisites list, quick-start commands (`uv sync`, `make check`, local run). Makefile command reference table. Dev Container setup for VS Code and JetBrains PyCharm. IDE setup without dev containers (extensions, settings, interpreter configuration).
+10. **Python Development Patterns** — dependency management rules (uv only, `uv.lock` committed, `--frozen` in CI). Code style summary (PEP compliance, Ruff, mypy strict, naming, docstrings). Ruff rule set table. Logging patterns (structlog only). Configuration validation patterns (pydantic). Async patterns (bounded concurrency).
+11. **Testing** — TDD methodology statement. Commands for running tests. Test directory structure with test counts per file. Testing conventions (naming, fixtures, mocking boundaries, async tests).
+12. **Kubernetes Deployment** — Kustomize base manifest inventory table. Default resource profile table. Step-by-step tenant overlay guide with complete YAML examples for `kustomization.yaml` and `configmap-patch.yaml`. Build-and-deploy commands (kustomize build, hydrate, commit). Resource limit override example. Container image build and publish instructions (including multi-stage Dockerfile description). Health probe endpoint table.
+13. **Environment Variables** — complete reference table of all environment variables with name, default value, and description.
+14. **License** — link to LICENSE file.
+
+**Style rules for README content:**
+
+- Use GitHub-flavored Markdown.
+- Prefer tables over long prose for reference material (fields, metrics, commands, env vars).
+- Code blocks MUST specify a language (`yaml`, `bash`, `python`, `json`, `promql`).
+- YAML and JSON examples MUST be valid and copy-pasteable.
+- ASCII diagrams are preferred over images for architecture; they render in all terminals and editors.
+- Keep each section self-contained — a reader should be able to jump to any section via the table of contents and understand it without reading prior sections.
+- Do not duplicate content from `openspec/` specs or `prd.md` verbatim; the README is the user-facing reference, not the spec.
+
 ## Domain Context
 
 - **Akuity-managed ArgoCD**: ArgoCD is hosted as a cloud service by Akuity. The bridge talks to the Akuity API (`/api/v1/orgs/{org}/instances/{instance}/applications`), not a self-hosted ArgoCD. API authentication is via API key.
