@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="700" viewBox="0 0 960 700" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .dim   { font-size: 13px; fill: #1B2733; }
+      .lvl   { font-size: 11px; fill: #5B6B7A; letter-spacing: 0.08em; }
+      .score { font-size: 11px; font-family: 'SF Mono', Consolas, monospace; fill: #2F5D7C; }
+      .delta { font-size: 10px; font-family: 'SF Mono', Consolas, monospace; fill: #C9822D; }
+    </style>
+  </defs>
+
+  <rect width="960" height="700" fill="#F7F8FA"/>
+
+  <!-- Title block -->
+  <text x="40" y="42" font-size="20" font-weight="700" fill="#1B2733">Multi-Tenant AKS GitOps Platform — Maturity Model</text>
+  <text x="40" y="64" font-size="12" fill="#5B6B7A">Current state (July 2026) vs. 24-month target · ~100 tenants · dev / nonprod / prod · team of 4</text>
+
+  <!-- Legend -->
+  <rect x="640" y="30" width="26" height="10" fill="#2F5D7C" rx="2"/>
+  <text x="672" y="39" font-size="11" fill="#1B2733">Current</text>
+  <path d="M 742 35 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="760" y="39" font-size="11" fill="#1B2733">24-mo target</text>
+  <line x1="852" y1="30" x2="852" y2="42" stroke="#8A2D2D" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="860" y="39" font-size="11" fill="#1B2733">Overall ≈ 2.6</text>
+
+  <!-- Level scale header -->
+  <!-- chart x: level 0 at x=300, level 5 at x=900 (120 px per level) -->
+  <g class="lvl">
+    <text x="420" y="96" text-anchor="middle">1 · AD HOC</text>
+    <text x="540" y="96" text-anchor="middle">2 · REPEATABLE</text>
+    <text x="660" y="96" text-anchor="middle">3 · DEFINED</text>
+    <text x="780" y="96" text-anchor="middle">4 · MANAGED</text>
+    <text x="900" y="96" text-anchor="middle">5 · OPTIMIZING</text>
+  </g>
+
+  <!-- Gridlines -->
+  <g stroke="#D9DEE4" stroke-width="1">
+    <line x1="300" y1="106" x2="300" y2="612"/>
+    <line x1="420" y1="106" x2="420" y2="612"/>
+    <line x1="540" y1="106" x2="540" y2="612"/>
+    <line x1="660" y1="106" x2="660" y2="612"/>
+    <line x1="780" y1="106" x2="780" y2="612"/>
+    <line x1="900" y1="106" x2="900" y2="612"/>
+  </g>
+
+  <!-- Overall marker at 2.6 -> x = 300 + 2.6*120 = 612 -->
+  <line x1="612" y1="106" x2="612" y2="612" stroke="#8A2D2D" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.7"/>
+
+  <!-- Rows: y starts 128, step 40. bar height 14. x(level)=300+level*120 -->
+
+  <!-- 1. Secrets Management: 4.0 -> 4.5 -->
+  <text x="288" y="136" text-anchor="end" class="dim">Secrets Management (ESO + Key Vault)</text>
+  <rect x="300" y="126" width="480" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="780" y1="133" x2="840" y2="133" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 840 133 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="121" class="score">4.0</text><text x="856" y="137" class="delta">+0.5</text>
+
+  <!-- 2. GitOps & Continuous Delivery: 3.5 -> 4.5 -->
+  <text x="288" y="176" text-anchor="end" class="dim">GitOps &amp; Continuous Delivery</text>
+  <rect x="300" y="166" width="420" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="720" y1="173" x2="840" y2="173" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 840 173 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="161" class="score">3.5</text><text x="856" y="177" class="delta">+1.0</text>
+
+  <!-- 3. Observability & FinOps: 3.0 -> 4.0 -->
+  <text x="288" y="216" text-anchor="end" class="dim">Observability &amp; FinOps</text>
+  <rect x="300" y="206" width="360" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="660" y1="213" x2="780" y2="213" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 780 213 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="201" class="score">3.0</text><text x="796" y="217" class="delta">+1.0</text>
+
+  <!-- 4. Platform Ops & Upgrades: 3.0 -> 3.5 -->
+  <text x="288" y="256" text-anchor="end" class="dim">Platform Ops &amp; Upgrades</text>
+  <rect x="300" y="246" width="360" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="660" y1="253" x2="720" y2="253" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 720 253 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="241" class="score">3.0</text><text x="736" y="257" class="delta">+0.5</text>
+
+  <!-- 5. Ingress & Traffic Management: 2.5 -> 4.0 -->
+  <text x="288" y="296" text-anchor="end" class="dim">Ingress &amp; Traffic Management</text>
+  <rect x="300" y="286" width="300" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="600" y1="293" x2="780" y2="293" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 780 293 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="281" class="score">2.5</text><text x="796" y="297" class="delta">+1.5</text>
+
+  <!-- 6. Admission Policy & Governance: 2.5 -> 4.0 -->
+  <text x="288" y="336" text-anchor="end" class="dim">Admission Policy &amp; Governance (Kyverno)</text>
+  <rect x="300" y="326" width="300" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="600" y1="333" x2="780" y2="333" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 780 333 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="321" class="score">2.5</text><text x="796" y="337" class="delta">+1.5</text>
+
+  <!-- 7. Tenant Onboarding & Self-Service: 2.5 -> 4.0 -->
+  <text x="288" y="376" text-anchor="end" class="dim">Tenant Onboarding &amp; Self-Service</text>
+  <rect x="300" y="366" width="300" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="600" y1="373" x2="780" y2="373" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 780 373 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="361" class="score">2.5</text><text x="796" y="377" class="delta">+1.5</text>
+
+  <!-- 8. Change Management & Compliance: 2.0 -> 3.5 -->
+  <text x="288" y="416" text-anchor="end" class="dim">Change Management &amp; Compliance</text>
+  <rect x="300" y="406" width="240" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="540" y1="413" x2="720" y2="413" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 720 413 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="401" class="score">2.0</text><text x="736" y="417" class="delta">+1.5</text>
+
+  <!-- 9. Network Segmentation / Zero Trust: 2.0 -> 3.5 -->
+  <text x="288" y="456" text-anchor="end" class="dim">Network Segmentation / Zero Trust (Cilium)</text>
+  <rect x="300" y="446" width="240" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="540" y1="453" x2="720" y2="453" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 720 453 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="441" class="score">2.0</text><text x="736" y="457" class="delta">+1.5</text>
+
+  <!-- 10. Supply Chain Security: 2.0 -> 3.5 -->
+  <text x="288" y="496" text-anchor="end" class="dim">Supply Chain Security (Cosign / Syft / OCI)</text>
+  <rect x="300" y="486" width="240" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="540" y1="493" x2="720" y2="493" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 720 493 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="481" class="score">2.0</text><text x="736" y="497" class="delta">+1.5</text>
+
+  <!-- 11. AI-Assisted Engineering: 2.0 -> 4.0 -->
+  <text x="288" y="536" text-anchor="end" class="dim">AI-Assisted Engineering (agents / skills)</text>
+  <rect x="300" y="526" width="240" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="540" y1="533" x2="780" y2="533" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 780 533 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="521" class="score">2.0</text><text x="796" y="537" class="delta">+2.0</text>
+
+  <!-- 12. Developer Experience / IDP: 1.5 -> 3.0 -->
+  <text x="288" y="576" text-anchor="end" class="dim">Developer Experience / IDP</text>
+  <rect x="300" y="566" width="180" height="14" fill="#2F5D7C" rx="2"/>
+  <line x1="480" y1="573" x2="660" y2="573" stroke="#C9822D" stroke-width="1.5" stroke-dasharray="3,3"/>
+  <path d="M 660 573 l 6 -6 l 6 6 l -6 6 z" fill="#C9822D"/>
+  <text x="306" y="561" class="score">1.5</text><text x="676" y="577" class="delta">+1.5</text>
+
+  <!-- Baseline -->
+  <line x1="300" y1="612" x2="900" y2="612" stroke="#8A97A3" stroke-width="1.5"/>
+
+  <!-- Footnote -->
+  <text x="40" y="646" font-size="11" fill="#5B6B7A">Scoring: designed-but-not-enforced capabilities are scored at implementation reality, not PRD ambition.</text>
+  <text x="40" y="664" font-size="11" fill="#5B6B7A">Center of gravity today: strong Level 3 delivery machinery pulling a Level 2 governance and self-service layer behind it.</text>
+</svg>

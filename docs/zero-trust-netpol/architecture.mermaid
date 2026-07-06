@@ -1,0 +1,51 @@
+flowchart TB
+    subgraph internet["Internet"]
+        imperva["Imperva WAF"]
+    end
+
+    subgraph aks["AKS Cluster (per env/region)"]
+        subgraph platform["Platform namespaces (T0 + Phase 4)"]
+            envoy["Envoy Gateway<br/>envoy-gateway-system"]
+            dns["CoreDNS<br/>kube-system"]
+            dd["Datadog agents<br/>(DaemonSet)"]
+            eso["ESO controller"]
+            kyverno["Kyverno<br/>admission + background"]
+            hubble["Cilium / Hubble"]
+        end
+
+        subgraph tenantA["Tenant NS a — T1 baseline (generated)"]
+            a1["app pods"]
+            polA["6x baseline CNPs<br/>default-deny + allows"]
+        end
+        subgraph tenantB["Tenant NS b"]
+            b1["app pods"]
+            polB["baseline CNPs<br/>+ T2 self-serve CNPs"]
+        end
+
+        apisrv["kube-apiserver<br/>(entity)"]
+        cfk["Confluent (CFK)<br/>brokers"]
+    end
+
+    akv["Azure Key Vault"]
+    ddintake["Datadog intake"]
+    saas["Approved SaaS<br/>(toFQDNs)"]
+
+    imperva -->|"mTLS + NSG allow-list"| envoy
+    envoy -->|"allow: rule 3"| a1
+    envoy -->|"allow: rule 3"| b1
+    a1 -->|"allow: rule 1 (53 + L7 DNS)"| dns
+    a1 -->|"allow: rule 5 (443)"| apisrv
+    dd -->|"allow: rule 4 scrape"| a1
+    b1 -->|"opt-in: rule 7"| cfk
+    b1 -->|"opt-in: rule 8"| saas
+    a1 -.->|"DENY (default)"| b1
+    a1 -.->|"DENY (no world/all)"| saas
+    eso --> akv
+    eso -->|"Secrets via API server"| apisrv
+    hubble -->|"flows / drops"| ddintake
+
+    kyverno -->|"generate T1 on NS create<br/>synchronize=true"| polA
+    kyverno -->|"validate T2 guardrails<br/>protect baseline"| polB
+
+    gitops["Akuity ArgoCD<br/>platform app-of-apps"] --> kyverno
+    gitops --> hubble
