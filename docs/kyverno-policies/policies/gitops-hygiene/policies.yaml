@@ -1,0 +1,174 @@
+# Category: GitOps Hygiene
+# All policies: Audit mode. Enforcement wave 1 except where noted.
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-ownership-labels
+  annotations:
+    policies.kyverno.io/category: gitops-hygiene
+    policies.kyverno.io/severity: medium
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # PLACEHOLDER label keys — align with the label schema already used by the
+    # quota dashboards and Copier onboarding templates before merge.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: tenant-and-costcenter-labels
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment", "StatefulSet", "DaemonSet", "CronJob"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      validate:
+        message: "Workloads must carry platform.example.com/tenant and platform.example.com/cost-center labels."
+        pattern:
+          metadata:
+            labels:
+              platform.example.com/tenant: "?*"
+              platform.example.com/cost-center: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-argocd-tracking
+  annotations:
+    policies.kyverno.io/category: gitops-hygiene
+    policies.kyverno.io/severity: high
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # Drift/bypass detection: workloads in tenant namespaces missing the ArgoCD
+    # tracking label were applied outside GitOps (kubectl apply). In Enforce this
+    # blocks the bypass path entirely. Verify the tracking method matches the
+    # Akuity instance config (label vs. annotation tracking) before Enforce.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: argocd-managed-only
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment", "StatefulSet", "DaemonSet", "CronJob"]
+              selector:
+                matchLabels:
+                  platform.example.com/tenant: "?*"
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      validate:
+        message: "Tenant workloads must be deployed via ArgoCD (missing tracking label — direct kubectl apply is not permitted)."
+        pattern:
+          metadata:
+            labels:
+              app.kubernetes.io/instance: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-sync-wave-on-hooks
+  annotations:
+    policies.kyverno.io/category: gitops-hygiene
+    policies.kyverno.io/severity: low
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # Ordering-sensitive resources (Jobs used as migrations/hooks) must declare
+    # an explicit sync-wave, matching the CFK / PingIDM sync-wave conventions.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: jobs-declare-sync-wave
+      match:
+        any:
+          - resources:
+              kinds: ["Job"]
+              selector:
+                matchLabels:
+                  platform.example.com/tenant: "?*"
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      preconditions:
+        all:
+          # Only Jobs managed by ArgoCD (not CronJob-spawned Jobs)
+          - key: "{{ request.object.metadata.ownerReferences[?kind=='CronJob'] | length(@) }}"
+            operator: Equals
+            value: 0
+      validate:
+        message: "ArgoCD-managed Jobs must declare argocd.argoproj.io/sync-wave for deterministic ordering."
+        pattern:
+          metadata:
+            annotations:
+              argocd.argoproj.io/sync-wave: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-appproject-scope
+  annotations:
+    policies.kyverno.io/category: gitops-hygiene
+    policies.kyverno.io/severity: high
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # Defense-in-depth alongside ArgoCD RBAC: tenant AppProjects must not use
+    # wildcard sourceRepos or destinations. Platform AppProjects excluded by name.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: no-wildcard-appprojects
+      match:
+        any:
+          - resources:
+              kinds: ["AppProject"]
+      preconditions:
+        all:
+          - key: "{{ request.object.metadata.name }}"
+            operator: AnyNotIn
+            value: ["default", "platform", "platform-system"]
+      validate:
+        message: "Tenant AppProjects must scope sourceRepos and destinations explicitly; wildcards are not permitted."
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.spec.sourceRepos[] || `[]` }}"
+                operator: AnyIn
+                value: ["*"]
+              - key: "{{ request.object.spec.destinations[].namespace || `[]` }}"
+                operator: AnyIn
+                value: ["*"]

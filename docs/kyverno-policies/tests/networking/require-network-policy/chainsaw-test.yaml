@@ -1,0 +1,45 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: require-network-policy
+spec:
+  # DESIGN NOTE: at admission time a new namespace can never contain a
+  # NetworkPolicy yet, so in Enforce this policy denies creation of any
+  # tenant-labeled namespace. It is safe in Audit/background mode only.
+  # This test documents that constraint deterministically; the policy must be
+  # redesigned (background-only or generate-based) before Wave 3 enforcement.
+  steps:
+    - name: install-policy-set-enforce
+      try:
+        - apply:
+            file: ../../../policies/networking/policies.yaml
+        - patch:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: require-network-policy
+              spec:
+                validationFailureAction: Enforce
+        - assert:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: require-network-policy
+              status:
+                conditions:
+                  - reason: Succeeded
+                    status: "True"
+                    type: Ready
+    - name: unlabeled-namespace-allowed
+      try:
+        - apply:
+            file: good-namespace.yaml
+    - name: tenant-labeled-namespace-without-netpol-denied
+      try:
+        - apply:
+            file: bad-namespace.yaml
+            expect:
+              - check:
+                  ($error != null): true

@@ -1,0 +1,38 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: require-readonly-rootfs
+spec:
+  steps:
+    - name: install-policy-set-enforce
+      try:
+        - apply:
+            file: ../../../policies/security-isolation/policies.yaml
+        - patch:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: require-readonly-rootfs
+              spec:
+                validationFailureAction: Enforce
+        - assert:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: require-readonly-rootfs
+              status:
+                conditions:
+                  - reason: Succeeded
+                    status: "True"
+                    type: Ready
+    - name: verify-policy-behavior
+      try:
+        - apply:
+            file: good-pod.yaml
+        - apply:
+            file: bad-pod.yaml
+            expect:
+              - check:
+                  ($error != null): true

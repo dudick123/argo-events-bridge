@@ -1,0 +1,40 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: restrict-appproject-scope
+spec:
+  # PREREQUISITE: ArgoCD AppProject CRD must be installed in the test cluster
+  # (kind cluster bootstrap should apply appproject-crd.yaml from ArgoCD upstream).
+  steps:
+    - name: install-policy-set-enforce
+      try:
+        - apply:
+            file: ../../../policies/gitops-hygiene/policies.yaml
+        - patch:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: restrict-appproject-scope
+              spec:
+                validationFailureAction: Enforce
+        - assert:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: restrict-appproject-scope
+              status:
+                conditions:
+                  - reason: Succeeded
+                    status: "True"
+                    type: Ready
+    - name: verify-policy-behavior
+      try:
+        - apply:
+            file: good-appproject.yaml
+        - apply:
+            file: bad-appproject.yaml
+            expect:
+              - check:
+                  ($error != null): true

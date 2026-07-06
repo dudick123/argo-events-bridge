@@ -1,0 +1,129 @@
+# Category: Networking
+# All policies: Audit mode.
+# NOTE: default-deny requirement is Wave 3 (blocked on Cilium egress gateway /
+# PRD-2026-INGRESS-SEC-001); LoadBalancer restriction is Wave 2 (blocked on
+# Envoy Gateway migration coverage). Both audit from day one regardless.
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-network-policy
+  annotations:
+    policies.kyverno.io/category: networking
+    policies.kyverno.io/severity: high
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "3"
+    # Background-scan check: flags tenant namespaces with zero NetworkPolicy or
+    # CiliumNetworkPolicy objects. Validates presence, not correctness — a
+    # default-deny *content* check is a Wave 3 refinement.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: netpol-exists-in-namespace
+      match:
+        any:
+          - resources:
+              kinds: ["Namespace"]
+              selector:
+                matchLabels:
+                  platform.example.com/tenant: "?*"
+      context:
+        - name: netpolCount
+          apiCall:
+            urlPath: "/apis/networking.k8s.io/v1/namespaces/{{ request.object.metadata.name }}/networkpolicies"
+            jmesPath: "items | length(@)"
+        - name: cnpCount
+          apiCall:
+            urlPath: "/apis/cilium.io/v2/namespaces/{{ request.object.metadata.name }}/ciliumnetworkpolicies"
+            jmesPath: "items | length(@)"
+      validate:
+        message: "Tenant namespaces must define at least one NetworkPolicy or CiliumNetworkPolicy (default-deny posture)."
+        deny:
+          conditions:
+            all:
+              - key: "{{ netpolCount }}"
+                operator: Equals
+                value: 0
+              - key: "{{ cnpCount }}"
+                operator: Equals
+                value: 0
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-wildcard-egress
+  annotations:
+    policies.kyverno.io/category: networking
+    policies.kyverno.io/severity: medium
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "3"
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: no-unapproved-allow-all-egress
+      match:
+        any:
+          - resources:
+              kinds: ["NetworkPolicy"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      preconditions:
+        all:
+          - key: "{{ request.object.metadata.annotations.\"platform.example.com/egress-approved\" || '' }}"
+            operator: NotEquals
+            value: "true"
+      validate:
+        message: "Allow-all egress rules require the platform.example.com/egress-approved annotation (via exception process)."
+        foreach:
+          - list: "request.object.spec.egress[] || `[]`"
+            deny:
+              conditions:
+                all:
+                  - key: "{{ element.to || `[]` | length(@) }}"
+                    operator: Equals
+                    value: 0
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-loadbalancer-services
+  annotations:
+    policies.kyverno.io/category: networking
+    policies.kyverno.io/severity: high
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "2"
+    # Wave 2: Enforce only once Envoy Gateway migration coverage threshold is
+    # met — ingress must route through the gateway layer, not tenant LBs.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: no-tenant-loadbalancers
+      match:
+        any:
+          - resources:
+              kinds: ["Service"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - argocd
+                - envoy-gateway-system
+                - cilium-system
+      validate:
+        message: "Service type LoadBalancer is not permitted for tenant workloads; expose via the platform gateway (HTTPRoute)."
+        pattern:
+          spec:
+            =(type): "!LoadBalancer"

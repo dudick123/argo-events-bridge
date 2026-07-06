@@ -1,0 +1,106 @@
+# Category: Secrets & Config
+# All policies: Audit mode.
+# Platform invariant: ESO + Azure Key Vault is the exclusive secret delivery
+# mechanism. These policies backstop that invariant at admission.
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-raw-secrets
+  annotations:
+    policies.kyverno.io/category: secrets-config
+    policies.kyverno.io/severity: high
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # Secrets created BY controllers must pass: ESO-materialized Secrets carry an
+    # ExternalSecret ownerReference; service-account tokens, Helm release storage
+    # (system workloads only), cert-manager TLS, and image pull secrets managed by
+    # the onboarding automation are excluded by type/owner below. Expect this list
+    # to grow during Phase 1 audit — that's the point of auditing first.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: secrets-must-come-from-eso
+      match:
+        any:
+          - resources:
+              kinds: ["Secret"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+                - cert-manager
+      preconditions:
+        all:
+          # Exclude well-known controller-managed Secret types
+          - key: "{{ request.object.type || 'Opaque' }}"
+            operator: AnyNotIn
+            value:
+              - "kubernetes.io/service-account-token"
+              - "helm.sh/release.v1"
+              - "kubernetes.io/tls"
+          # Exclude Secrets owned by an ExternalSecret (ESO-materialized)
+          - key: "{{ request.object.metadata.ownerReferences[?kind=='ExternalSecret'] | length(@) }}"
+            operator: Equals
+            value: 0
+      validate:
+        message: "Raw Secret objects are not permitted in tenant namespaces; deliver secrets via ESO ExternalSecret backed by Azure Key Vault."
+        deny: {}
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-secret-env-in-plaintext-configmaps
+  annotations:
+    policies.kyverno.io/category: secrets-config
+    policies.kyverno.io/severity: medium
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # Heuristic companion to disallow-raw-secrets: flags ConfigMaps whose keys
+    # look like credentials, catching the "just put it in a ConfigMap" workaround.
+    # Expect false positives in audit (e.g. PASSWORD_POLICY_URL); tune key list
+    # from Phase 1 data before any Enforce discussion.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: credential-shaped-configmap-keys
+      match:
+        any:
+          - resources:
+              kinds: ["ConfigMap"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+      validate:
+        message: "ConfigMap contains credential-shaped keys; secrets must be delivered via ESO, not ConfigMaps."
+        foreach:
+          - list: "keys(request.object.data || `{}`)"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ contains(lower(element), 'password') }}"
+                    operator: Equals
+                    value: true
+                  - key: "{{ contains(lower(element), 'api_key') || contains(lower(element), 'apikey') }}"
+                    operator: Equals
+                    value: true
+                  - key: "{{ contains(lower(element), 'client_secret') }}"
+                    operator: Equals
+                    value: true

@@ -1,0 +1,38 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: restrict-wildcard-egress
+spec:
+  steps:
+    - name: install-policy-set-enforce
+      try:
+        - apply:
+            file: ../../../policies/networking/policies.yaml
+        - patch:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: restrict-wildcard-egress
+              spec:
+                validationFailureAction: Enforce
+        - assert:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: restrict-wildcard-egress
+              status:
+                conditions:
+                  - reason: Succeeded
+                    status: "True"
+                    type: Ready
+    - name: verify-policy-behavior
+      try:
+        - apply:
+            file: good-networkpolicy.yaml
+        - apply:
+            file: bad-networkpolicy.yaml
+            expect:
+              - check:
+                  ($error != null): true

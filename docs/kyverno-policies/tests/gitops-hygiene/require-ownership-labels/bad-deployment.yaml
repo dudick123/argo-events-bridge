@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bad-deploy
+  labels:
+    app.kubernetes.io/name: sample
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bad-deploy
+  template:
+    metadata:
+      labels:
+        app: bad-deploy
+    spec:
+      containers:
+        - name: app
+          image: platformacr.azurecr.io/sample:1.0.0

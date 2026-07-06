@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: good-deploy
+  labels:
+    platform.example.com/tenant: sample-tenant
+    platform.example.com/cost-center: cc-1234
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: good-deploy
+  template:
+    metadata:
+      labels:
+        app: good-deploy
+    spec:
+      containers:
+        - name: app
+          image: platformacr.azurecr.io/sample:1.0.0

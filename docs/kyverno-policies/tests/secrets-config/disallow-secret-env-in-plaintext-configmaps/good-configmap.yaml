@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: good-cm
+data:
+  LOG_LEVEL: info
+  FEATURE_FLAGS: "a,b,c"

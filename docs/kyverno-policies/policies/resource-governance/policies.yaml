@@ -1,0 +1,144 @@
+# Category: Resource Governance
+# All policies: Audit mode, background scan enabled.
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-requests-limits
+  annotations:
+    policies.kyverno.io/category: resource-governance
+    policies.kyverno.io/severity: high
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # Coordinate Enforce timing with the HPA injection rollout: workloads using
+    # profile-annotation-based injection get resources mutated in, so they should
+    # pass here post-mutation. Validate webhook ordering in dev during Wave 1.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: requests-and-limits-required
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      validate:
+        message: "All containers must declare CPU/memory requests and memory limits."
+        pattern:
+          spec:
+            containers:
+              - resources:
+                  requests:
+                    cpu: "?*"
+                    memory: "?*"
+                  limits:
+                    memory: "?*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-pdb-for-multireplica
+  annotations:
+    policies.kyverno.io/category: resource-governance
+    policies.kyverno.io/severity: medium
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # Cross-resource check via apiCall context — background-scan friendly,
+    # slightly heavier at admission. Directly supports the AKS upgrade
+    # automation initiative (PDB preflight).
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: pdb-exists-for-deployment
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment", "StatefulSet"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.replicas || `1` }}"
+            operator: GreaterThan
+            value: 1
+      context:
+        - name: pdbCount
+          apiCall:
+            urlPath: "/apis/policy/v1/namespaces/{{ request.namespace }}/poddisruptionbudgets"
+            jmesPath: "items | length(@)"
+      validate:
+        message: "Multi-replica workloads must have a PodDisruptionBudget in the namespace."
+        deny:
+          conditions:
+            all:
+              - key: "{{ pdbCount }}"
+                operator: Equals
+                value: 0
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: limit-replica-count
+  annotations:
+    policies.kyverno.io/category: resource-governance
+    policies.kyverno.io/severity: medium
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # PLACEHOLDER: cap of 20 is a starting point — align with the tenant
+    # sizing/tier framework (XS–XL) before Enforce, potentially via a
+    # tier-annotation-driven variable instead of a flat number.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: max-replicas
+      match:
+        any:
+          - resources:
+              kinds: ["Deployment", "StatefulSet"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      validate:
+        message: "Replica count exceeds the platform cap (20); request a tier exception if needed."
+        deny:
+          conditions:
+            all:
+              - key: "{{ request.object.spec.replicas || `1` }}"
+                operator: GreaterThan
+                value: 20

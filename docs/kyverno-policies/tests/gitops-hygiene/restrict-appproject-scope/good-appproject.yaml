@@ -1,0 +1,10 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: good-tenant-project
+spec:
+  sourceRepos:
+    - https://dev.azure.com/org/project/_git/tenant-config
+  destinations:
+    - namespace: sample-tenant
+      server: https://kubernetes.default.svc

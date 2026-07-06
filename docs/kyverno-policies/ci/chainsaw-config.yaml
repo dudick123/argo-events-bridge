@@ -1,0 +1,16 @@
+apiVersion: chainsaw.kyverno.io/v1alpha2
+kind: Configuration
+metadata:
+  name: kyverno-policies-ci
+spec:
+  # ClusterPolicy is cluster-scoped and tests patch Enforce on shared objects —
+  # parallel execution would collide. Run sequentially (same reasoning as
+  # -parallelism=1 in the AKS upgrade automation).
+  execution:
+    parallel: 1
+  timeouts:
+    apply: 45s
+    assert: 120s
+    delete: 45s
+    error: 120s
+    exec: 45s

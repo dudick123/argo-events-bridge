@@ -1,0 +1,136 @@
+# Category: Image Supply Chain
+# All policies: Audit mode.
+# NOTE: verify-image-signatures is a STUB — enforcement is Wave 4, hard-blocked
+# on v3 ADO pipeline Cosign signing reaching full fleet coverage.
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-latest-tag
+  annotations:
+    policies.kyverno.io/category: image-supply-chain
+    policies.kyverno.io/severity: medium
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: require-image-tag
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      validate:
+        message: "Images must use a pinned tag or digest; ':latest' and untagged images are not permitted."
+        foreach:
+          - list: "request.object.spec.containers[]"
+            deny:
+              conditions:
+                any:
+                  - key: "{{ ends_with(element.image, ':latest') }}"
+                    operator: Equals
+                    value: true
+                  - key: "{{ contains(element.image, ':') || contains(element.image, '@') }}"
+                    operator: Equals
+                    value: false
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-image-registries
+  annotations:
+    policies.kyverno.io/category: image-supply-chain
+    policies.kyverno.io/severity: high
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "1"
+    # PLACEHOLDER: replace with the actual platform ACR hostnames before merge.
+spec:
+  validationFailureAction: Audit
+  background: true
+  rules:
+    - name: approved-registries-only
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      validate:
+        message: "Images must come from an approved platform registry."
+        pattern:
+          spec:
+            =(initContainers):
+              - image: "platformacr.azurecr.io/* | platformacrcache.azurecr.io/*"
+            containers:
+              - image: "platformacr.azurecr.io/* | platformacrcache.azurecr.io/*"
+---
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    policies.kyverno.io/category: image-supply-chain
+    policies.kyverno.io/severity: high
+    platform.example.com/prd: PRD-2026-KYVERNO-POLICY-001
+    platform.example.com/enforcement-wave: "4"
+    # STUB — Wave 4. Audit-only until v3 ADO pipeline Cosign signing covers
+    # the full fleet. PLACEHOLDER public key / keyless issuer below.
+spec:
+  validationFailureAction: Audit
+  background: false
+  webhookTimeoutSeconds: 30
+  rules:
+    - name: cosign-signature-required
+      match:
+        any:
+          - resources:
+              kinds: ["Pod"]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - kube-public
+                - kube-node-lease
+                - argocd
+                - kyverno
+                - datadog
+                - external-secrets
+                - envoy-gateway-system
+                - cilium-system
+      verifyImages:
+        - imageReferences:
+            - "platformacr.azurecr.io/*"
+          failureAction: Audit
+          attestors:
+            - entries:
+                - keys:
+                    publicKeys: |-
+                      -----BEGIN PUBLIC KEY-----
+                      PLACEHOLDER_REPLACE_WITH_PLATFORM_COSIGN_PUBLIC_KEY
+                      -----END PUBLIC KEY-----

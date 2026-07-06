@@ -1,0 +1,24 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: verify-image-signatures
+spec:
+  # Install-only test: full signature verification requires signed test images
+  # and the real platform Cosign key (Wave 4 dependency). This validates the
+  # stub installs cleanly and becomes Ready without breaking admission.
+  steps:
+    - name: install-policy-assert-ready
+      try:
+        - apply:
+            file: ../../../policies/image-supply-chain/policies.yaml
+        - assert:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: verify-image-signatures
+              status:
+                conditions:
+                  - reason: Succeeded
+                    status: "True"
+                    type: Ready

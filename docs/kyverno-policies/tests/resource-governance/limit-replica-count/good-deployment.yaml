@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: good-deploy
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: good-deploy
+  template:
+    metadata:
+      labels:
+        app: good-deploy
+    spec:
+      containers:
+        - name: app
+          image: platformacr.azurecr.io/sample:1.0.0

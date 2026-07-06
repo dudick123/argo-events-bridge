@@ -1,0 +1,180 @@
+# azure-pipelines.yml — CI gate for the kyverno-policies repo
+# PRD-2026-KYVERNO-POLICY-001 / KYV-001
+#
+# Two-stage gate, mirroring the render-pipeline pattern (PRD-2026-CI-RENDER-001):
+#   Stage 1 (fast): static validation — YAML lint, kustomize build, schema
+#                   validation via kubeconform + Kyverno CRD JSON schemas,
+#                   and an audit-mode guard.
+#   Stage 2 (slow): e2e — kind cluster, Kyverno install, Chainsaw suite.
+# PRs must pass both. Stage 2 only runs if Stage 1 passes.
+
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  KYVERNO_CHART_VERSION: "3.3.4"        # pin; bump deliberately
+  CHAINSAW_VERSION: "v0.2.12"           # pin; bump deliberately
+  KIND_VERSION: "v0.24.0"
+  KIND_NODE_IMAGE: "kindest/node:v1.31.0"   # track platform AKS version skew policy
+  KUBECONFORM_VERSION: "v0.6.7"
+
+stages:
+  # ──────────────────────────────────────────────────────────────────────────
+  - stage: StaticValidation
+    displayName: "Static validation"
+    jobs:
+      - job: lint_and_schema
+        displayName: "Lint, build, schema, audit-guard"
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+
+          - script: |
+              pip install yamllint --quiet
+              yamllint -d "{extends: default, rules: {line-length: disable, document-start: disable, comments: {min-spaces-from-content: 1}}}" policies/ tests/
+            displayName: "yamllint"
+
+          - script: |
+              curl -sSLo kustomize.tgz "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz"
+              tar -xzf kustomize.tgz && sudo mv kustomize /usr/local/bin/
+              kustomize build . > /tmp/rendered-policies.yaml
+              echo "Rendered $(grep -c '^kind: ClusterPolicy' /tmp/rendered-policies.yaml) ClusterPolicies"
+            displayName: "kustomize build (ArgoCD sync parity)"
+
+          - script: |
+              curl -sSLo kubeconform.tgz "https://github.com/yannh/kubeconform/releases/download/$(KUBECONFORM_VERSION)/kubeconform-linux-amd64.tar.gz"
+              tar -xzf kubeconform.tgz && sudo mv kubeconform /usr/local/bin/
+              # Kyverno ClusterPolicy schema from the in-house CRD JSON schema store
+              # (same store PRD-2026-CI-RENDER-001 uses; datree CRD catalog as fallback)
+              kubeconform \
+                -schema-location default \
+                -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+                -strict -summary /tmp/rendered-policies.yaml
+            displayName: "kubeconform schema validation"
+
+          - script: |
+              # AUDIT-MODE GUARD: the base catalog must never commit Enforce.
+              # Phase 3 promotion happens via per-environment overlays with an
+              # explicit approval check — not by editing the base. A PR flipping
+              # validationFailureAction here is either a mistake or a bypass.
+              set -e
+              violations=$(grep -rn "validationFailureAction: Enforce" policies/ || true)
+              if [ -n "$violations" ]; then
+                echo "##vso[task.logissue type=error]Base policy catalog must remain Audit mode. Enforce promotion goes through environment overlays."
+                echo "$violations"
+                exit 1
+              fi
+              echo "All base policies are Audit mode ✔"
+            displayName: "Audit-mode guard"
+
+          - script: |
+              python3 - << 'PYEOF'
+              import yaml, glob, sys
+              # Structural checks: every policy carries the PRD + wave annotations
+              # the Phase 3 promotion tooling selects on.
+              errs = []
+              for f in glob.glob('policies/*/policies.yaml'):
+                  for d in yaml.safe_load_all(open(f)):
+                      if not d:
+                          continue
+                      ann = d['metadata'].get('annotations', {})
+                      name = d['metadata']['name']
+                      if 'platform.example.com/enforcement-wave' not in ann:
+                          errs.append(f"{name}: missing enforcement-wave annotation")
+                      if 'platform.example.com/prd' not in ann:
+                          errs.append(f"{name}: missing prd annotation")
+                      # every policy dir must have a matching chainsaw test
+              import os
+              for f in glob.glob('policies/*/policies.yaml'):
+                  cat = f.split('/')[1]
+                  for d in yaml.safe_load_all(open(f)):
+                      if not d:
+                          continue
+                      name = d['metadata']['name']
+                      if not os.path.isdir(f'tests/{cat}/{name}'):
+                          errs.append(f"{name}: no chainsaw test at tests/{cat}/{name}/")
+              if errs:
+                  print('\n'.join(errs)); sys.exit(1)
+              print("Annotations + test coverage checks passed ✔")
+              PYEOF
+            displayName: "Policy metadata + test coverage check"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  - stage: ChainsawE2E
+    displayName: "Chainsaw e2e (kind)"
+    dependsOn: StaticValidation
+    jobs:
+      - job: chainsaw
+        displayName: "kind + Kyverno + Chainsaw"
+        pool:
+          vmImage: ubuntu-latest
+        timeoutInMinutes: 30
+        steps:
+          - checkout: self
+
+          - script: |
+              curl -sSLo kind "https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-linux-amd64"
+              chmod +x kind && sudo mv kind /usr/local/bin/
+              kind create cluster --name kyverno-ci --image $(KIND_NODE_IMAGE) --wait 120s
+            displayName: "Create kind cluster"
+
+          - script: |
+              helm repo add kyverno https://kyverno.github.io/kyverno --force-update
+              helm install kyverno kyverno/kyverno \
+                --namespace kyverno --create-namespace \
+                --version $(KYVERNO_CHART_VERSION) \
+                --set admissionController.replicas=1 \
+                --set backgroundController.replicas=1 \
+                --set cleanupController.replicas=1 \
+                --set reportsController.replicas=1 \
+                --wait --timeout 5m
+            displayName: "Install Kyverno"
+
+          - script: |
+              # AppProject CRD — required by the restrict-appproject-scope test
+              kubectl apply -f https://raw.githubusercontent.com/argoproj/argo-cd/v2.13.2/manifests/crds/appproject-crd.yaml
+              # CiliumNetworkPolicy CRD — referenced by require-network-policy apiCall;
+              # a minimal stub CRD is sufficient (no Cilium agent needed for the check)
+              kubectl apply -f ci/crds/ciliumnetworkpolicy-stub-crd.yaml
+            displayName: "Install prerequisite CRDs"
+
+          - script: |
+              curl -sSLo chainsaw.tgz "https://github.com/kyverno/chainsaw/releases/download/$(CHAINSAW_VERSION)/chainsaw_linux_amd64.tar.gz"
+              tar -xzf chainsaw.tgz && sudo mv chainsaw /usr/local/bin/
+              chainsaw version
+            displayName: "Install Chainsaw"
+
+          - script: |
+              chainsaw test tests/ \
+                --config ci/chainsaw-config.yaml \
+                --report-format JUNIT-STEP \
+                --report-name chainsaw-results \
+                --report-path $(Build.ArtifactStagingDirectory)
+            displayName: "Run Chainsaw test suite"
+
+          - task: PublishTestResults@2
+            displayName: "Publish Chainsaw results"
+            condition: always()
+            inputs:
+              testResultsFormat: JUnit
+              testResultsFiles: "$(Build.ArtifactStagingDirectory)/chainsaw-results.xml"
+              testRunTitle: "Kyverno policy Chainsaw suite"
+
+          - script: |
+              # Diagnostics on failure: Kyverno logs + policy statuses
+              kubectl -n kyverno logs -l app.kubernetes.io/component=admission-controller --tail=200 || true
+              kubectl get clusterpolicy -o wide || true
+            displayName: "Failure diagnostics"
+            condition: failed()
+
+          - script: kind delete cluster --name kyverno-ci
+            displayName: "Teardown"
+            condition: always()

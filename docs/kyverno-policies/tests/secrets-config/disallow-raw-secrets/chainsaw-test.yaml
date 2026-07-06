@@ -1,0 +1,38 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: disallow-raw-secrets
+spec:
+  steps:
+    - name: install-policy-set-enforce
+      try:
+        - apply:
+            file: ../../../policies/secrets-config/policies.yaml
+        - patch:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: disallow-raw-secrets
+              spec:
+                validationFailureAction: Enforce
+        - assert:
+            resource:
+              apiVersion: kyverno.io/v1
+              kind: ClusterPolicy
+              metadata:
+                name: disallow-raw-secrets
+              status:
+                conditions:
+                  - reason: Succeeded
+                    status: "True"
+                    type: Ready
+    - name: verify-policy-behavior
+      try:
+        - apply:
+            file: good-secret.yaml
+        - apply:
+            file: bad-secret.yaml
+            expect:
+              - check:
+                  ($error != null): true
